@@ -24,11 +24,27 @@ const DEFAULT_LOCALE_DATA = {
 
 /* eslint-disable jsdoc/valid-types */
 /**
+ * @typedef {(domain?: string) => LocaleData} GetLocaleData
+ *
+ * Returns locale data by domain in a
+ * Jed-formatted JSON object shape.
+ *
+ * @see http://messageformat.github.io/Jed/
+ */
+/**
  * @typedef {(data?: LocaleData, domain?: string) => void} SetLocaleData
+ *
  * Merges locale data into the Tannin instance by domain. Accepts data in a
  * Jed-formatted JSON object shape.
  *
  * @see http://messageformat.github.io/Jed/
+ */
+/** @typedef {() => void} SubscribeCallback */
+/** @typedef {() => void} UnsubscribeCallback */
+/**
+ * @typedef {(callback: SubscribeCallback) => UnsubscribeCallback} Subscribe
+ *
+ * Subscribes to changes of locale data
  */
 /**
  * @typedef {(text: string, domain?: string) => string} __
@@ -70,14 +86,21 @@ const DEFAULT_LOCALE_DATA = {
  * language written RTL. The opposite of RTL, LTR (Left To Right) is used in other languages,
  * including English (`en`, `en-US`, `en-GB`, etc.), Spanish (`es`), and French (`fr`).
  */
+/**
+ * @typedef {(single: string, context?: string, domain?: string) => boolean} HasTranslation
+ *
+ * Check if there is a translation for a given string in singular form.
+ */
 /* eslint-enable jsdoc/valid-types */
 
 /**
  * An i18n instance
  *
  * @typedef I18n
+ * @property {GetLocaleData} getLocaleData Returns locale data by domain in a Jed-formatted JSON object shape.
  * @property {SetLocaleData} setLocaleData Merges locale data into the Tannin instance by domain. Accepts data in a
  *                                         Jed-formatted JSON object shape.
+ * @property {Subscribe} subscribe         Subscribes to changes of Tannin locale data.
  * @property {__} __                       Retrieve the translation of text.
  * @property {_x} _x                       Retrieve translated string with gettext context.
  * @property {_n} _n                       Translates and retrieves the singular or plural form based on the supplied
@@ -85,6 +108,7 @@ const DEFAULT_LOCALE_DATA = {
  * @property {_nx} _nx                     Translates and retrieves the singular or plural form based on the supplied
  *                                         number, with gettext context.
  * @property {IsRtl} isRTL                 Check if current locale is RTL.
+ * @property {HasTranslation} hasTranslation Check if there is a translation for a given string.
  */
 
 /**
@@ -102,6 +126,11 @@ export const createI18n = ( initialData, initialDomain ) => {
 	 */
 	const tannin = new Tannin( {} );
 
+	const listeners = new Set();
+
+	/** @type {GetLocaleData} */
+	const getLocaleData = ( domain = 'default' ) => tannin.data[ domain ];
+
 	/** @type {SetLocaleData} */
 	const setLocaleData = ( data, domain = 'default' ) => {
 		tannin.data[ domain ] = {
@@ -116,6 +145,19 @@ export const createI18n = ( initialData, initialDomain ) => {
 			...DEFAULT_LOCALE_DATA[ '' ],
 			...tannin.data[ domain ][ '' ],
 		};
+
+		listeners.forEach( ( listener ) => listener() );
+	};
+
+	/**
+	 * Subscribe to changes of locale data.
+	 *
+	 * @param {SubscribeCallback} callback Subscription callback.
+	 * @return {UnsubscribeCallback} Unsubscribe callback.
+	 */
+	const subscribe = ( callback ) => {
+		listeners.add( callback );
+		return () => listeners.delete( callback );
 	};
 
 	/**
@@ -172,16 +214,28 @@ export const createI18n = ( initialData, initialDomain ) => {
 		return 'rtl' === _x( 'ltr', 'text direction' );
 	};
 
+	/** @type {HasTranslation} */
+	const hasTranslation = ( singular, context, domain = 'default' ) => {
+		const key =
+			typeof context === 'string'
+				? context + '\u0004' + singular
+				: singular;
+		return tannin.data[ domain ] && key in tannin.data[ domain ];
+	};
+
 	if ( initialData ) {
 		setLocaleData( initialData, initialDomain );
 	}
 
 	return {
+		getLocaleData,
 		setLocaleData,
+		subscribe,
 		__,
 		_x,
 		_n,
 		_nx,
 		isRTL,
+		hasTranslation,
 	};
 };
